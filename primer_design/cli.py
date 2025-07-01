@@ -2,6 +2,7 @@ import argparse
 import sys
 from primer_design.core import load_fasta_sequence, primer_design, print_results
 
+
 # Main function pipeline to design primers
 def main():
     parser = argparse.ArgumentParser(description="Design PCR primers with melting temperature constraints")
