@@ -15,6 +15,8 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqUtils.MeltingTemp import Tm_NN
 from Bio.SeqUtils import gc_fraction
+import time
+import datetime
 
 
 def load_fasta_sequence(fasta_file: str) -> str:
@@ -73,70 +75,28 @@ def calculate_tm(primer: str) -> float:
     return Tm_NN(primer)
 
 
-def find_optimal_primer(sequence: str, start_pos: int, is_forward: bool = True, 
-                       min_length: int = 18, max_length: int = 24,
-                       min_tm: float = 55.0, max_tm: float = 65.0) -> Tuple[str, int, float]:
+def find_valid_primers_in_window(sequence: str, window_start: int, amplicon_length: int = 500,
+                                min_length: int = 18, max_length: int = 24,
+                                min_tm: float = 55.0, max_tm: float = 65.0) -> tuple:
     """
-    Find optimal primer within specified constraints.
-    
-    Args:
-        sequence: DNA sequence to search
-        start_pos: Starting position for primer search
-        is_forward: True for forward primer, False for reverse primer
-        min_length: Minimum primer length
-        max_length: Maximum primer length
-        min_tm: Minimum melting temperature
-        max_tm: Maximum melting temperature
-        
-    Returns:
-        Tuple of (primer_sequence, position, melting_temperature)
-        
-    Raises:
-        ValueError: If no suitable primer found
+    Try to find a valid forward and reverse primer pair in a given window.
+    Returns (forward_primer, forward_pos, forward_tm, reverse_primer, reverse_pos, reverse_tm) or None if not found.
     """
-    best_primer = None
-    best_tm = 0.0
-    best_pos = 0
-    
-    # For forward primer, search forward from start_pos
-    # For reverse primer, search backward from start_pos
-    if is_forward:
-        search_range = range(start_pos, min(start_pos + 100, len(sequence) - min_length))
-    else:
-        search_range = range(max(0, start_pos - 100), start_pos - min_length, -1)
-    
-    for pos in search_range:
-        for length in range(min_length, max_length + 1):
-            if is_forward:
-                if pos + length > len(sequence):
-                    continue
-                primer = sequence[pos:pos + length]
-            else:
-                if pos - length < 0:
-                    continue
-                primer = sequence[pos - length:pos]
-            
-            # Calculate melting temperature
-            try:
-                tm = calculate_tm(primer)
-                
-                # Check if temperature is within range
-                if min_tm <= tm <= max_tm:
-                    # Prefer primers closer to target temperature (60°C)
-                    target_tm = 60.0
-                    if best_primer is None or abs(tm - target_tm) < abs(best_tm - target_tm):
-                        best_primer = primer
-                        best_tm = tm
-                        best_pos = pos
-                        
-            except Exception:
-                # Skip primers that can't be calculated
-                continue
-    
-    if best_primer is None:
-        raise ValueError(f"No suitable {'forward' if is_forward else 'reverse'} primer found")
-    
-    return best_primer, best_pos, best_tm
+    window_end = window_start + amplicon_length
+    window_seq = sequence[window_start:window_end]
+    # Forward primer: try all 18-24 bp at window start
+    for fwd_len in range(min_length, max_length + 1):
+        fwd_primer = window_seq[:fwd_len]
+        fwd_tm = calculate_tm(fwd_primer)
+        if min_tm <= fwd_tm <= max_tm:
+            # Reverse primer: try all 18-24 bp at window end
+            for rev_len in range(min_length, max_length + 1):
+                rev_primer_template = window_seq[-rev_len:]
+                rev_primer = get_reverse_complement(rev_primer_template)
+                rev_tm = calculate_tm(rev_primer_template)
+                if min_tm <= rev_tm <= max_tm:
+                    return (fwd_primer, window_start, fwd_tm, rev_primer, window_end - rev_len, rev_tm)
+    return None
 
 
 def get_reverse_complement(sequence: str) -> str:
@@ -154,73 +114,53 @@ def get_reverse_complement(sequence: str) -> str:
 
 def primer_design(fasta_file: str, amplicon_length: int = 500) -> dict:
     """
-    Design forward and reverse primers for PCR amplification.
-    
-    Args:
-        fasta_file: Path to FASTA file containing DNA sequence
-        amplicon_length: Target amplicon length in base pairs
-        
-    Returns:
-        Dictionary containing primer information
+    Slide a window across the sequence and return the first valid primer pair found.
     """
-    # Load DNA sequence
     sequence = load_fasta_sequence(fasta_file)
     print(f"Loaded DNA sequence: {len(sequence)} bp")
-    
-    # Define amplicon region (start and end positions)
-    # For this example, we'll start from position 1000 to avoid plasmid backbone
-    amplicon_start = 1000
-    amplicon_end = amplicon_start + amplicon_length
-    
-    if amplicon_end > len(sequence):
-        raise ValueError(f"Amplicon end position ({amplicon_end}) exceeds sequence length ({len(sequence)})")
-    
-    print(f"Target amplicon: positions {amplicon_start} to {amplicon_end} ({amplicon_length} bp)")
-    
-    # Design forward primer (from start of amplicon)
-    print("\nDesigning forward primer...")
-    forward_primer, forward_pos, forward_tm = find_optimal_primer(
-        sequence, amplicon_start, is_forward=True
-    )
-    
-    # Design reverse primer (from end of amplicon, using reverse complement)
-    print("Designing reverse primer...")
-    reverse_primer, reverse_pos, reverse_tm = find_optimal_primer(
-        sequence, amplicon_end, is_forward=False
-    )
-    
-    # Get reverse complement of reverse primer for actual PCR use
-    reverse_primer_rc = get_reverse_complement(reverse_primer)
-    
-    # Calculate actual amplicon length
-    actual_amplicon_length = reverse_pos - forward_pos + len(forward_primer)
-    
-    # Prepare results
-    results = {
-        'forward_primer': {
-            'sequence': forward_primer,
-            'position': forward_pos,
-            'length': len(forward_primer),
-            'tm': forward_tm,
-            'gc_content': gc_fraction(forward_primer) * 100
-        },
-        'reverse_primer': {
-            'sequence': reverse_primer_rc,  # Reverse complement for PCR
-            'template_sequence': reverse_primer,  # Original sequence on template
-            'position': reverse_pos,
-            'length': len(reverse_primer),
-            'tm': reverse_tm,
-            'gc_content': gc_fraction(reverse_primer) * 100
-        },
-        'amplicon': {
-            'start': forward_pos,
-            'end': reverse_pos + len(reverse_primer),
-            'length': actual_amplicon_length,
-            'target_length': amplicon_length
-        }
-    }
-    
-    return results
+    print(f"Sliding window search for {amplicon_length} bp amplicons...")
+    start_time = time.time()
+    print(f"Start time: {datetime.datetime.now().isoformat()}")
+    for window_start in range(0, len(sequence) - amplicon_length + 1):
+        result = find_valid_primers_in_window(sequence, window_start, amplicon_length)
+        if result:
+            end_time = time.time()
+            print(f"End time: {datetime.datetime.now().isoformat()}")
+            print(f"Elapsed time: {end_time - start_time:.2f} seconds")
+            (fwd_primer, fwd_pos, fwd_tm, rev_primer, rev_pos, rev_tm) = result
+            return {
+                'forward_primer': {
+                    'sequence': fwd_primer,
+                    'position': fwd_pos,
+                    'length': len(fwd_primer),
+                    'tm': fwd_tm,
+                    'gc_content': gc_fraction(fwd_primer) * 100
+                },
+                'reverse_primer': {
+                    'sequence': rev_primer,
+                    'template_sequence': sequence[rev_pos:rev_pos+len(rev_primer)],
+                    'position': rev_pos,
+                    'length': len(rev_primer),
+                    'tm': rev_tm,
+                    'gc_content': gc_fraction(sequence[rev_pos:rev_pos+len(rev_primer)]) * 100
+                },
+                'amplicon': {
+                    'start': fwd_pos,
+                    'end': rev_pos + len(rev_primer),
+                    'length': (rev_pos + len(rev_primer)) - fwd_pos,
+                    'target_length': amplicon_length
+                },
+                'search': {
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'elapsed': end_time - start_time,
+                    'window_start': window_start
+                }
+            }
+    end_time = time.time()
+    print(f"End time: {datetime.datetime.now().isoformat()}")
+    print(f"Elapsed time: {end_time - start_time:.2f} seconds")
+    raise ValueError("No suitable primer pair found in any window.")
 
 
 def print_results(results: dict):
