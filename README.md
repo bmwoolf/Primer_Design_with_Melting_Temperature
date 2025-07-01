@@ -1,14 +1,12 @@
 ![Banner](assets/github_banner.png)
 
-# Primer_Design_with_Melting_Temperature
-
-## Challenge 2: Primer Design with Melting Temperature
+# Challenge 2: Primer Design with Melting Temperature
 
 ### Overview
 
-This project designs **PCR primers** from a given DNA sequence.  
-The primers must:
+This project designs **PCR primers** from a given DNA sequence for protein expression in E. coli. 
 
+The primers must:
 - Be **18–24 base pairs** long
 - Have **melting temperatures (Tm)** between **55–65°C**
 - Optionally avoid hairpins and self-dimers
@@ -35,11 +33,11 @@ This mimics a real-world cloning scenario for expressing antivenom-related genes
 
 - `pET28a_Melittin.fasta` — input plasmid sequence
 - `primer_design.py` — primer selection script
-- (Optional) `test_primer_design.py` — validation tests
+- `test_primer_design.py` — validation tests
 
 ---
 
-## ▶Usage
+## Usage
 
 ```bash
 python primer_design.py --fasta pET28a_Melittin.fasta --amplicon_length 500
