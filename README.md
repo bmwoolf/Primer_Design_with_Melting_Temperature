@@ -28,35 +28,36 @@ This mimics a real-world cloning scenario for expressing antivenom-related genes
 ## Files
 
 - `pET28a_Melittin.fasta` — input plasmid sequence
-- `primer_design.py` — primer selection script
-- `test_primer_design.py` — validation tests
+- `primer_design/` — main package code
+- `tests/` — unit tests
 
-## Usage
+## Installation & Usage
+
+From the project root directory:
 
 1. **(Recommended) Create and activate a virtual environment:**
+   ```bash
+   python3 -m venv env
+   source env/bin/activate  # On Windows use: env\Scripts\activate
+   ```
 
-```bash
-python3 -m venv env
-source env/bin/activate  # On Windows use: venv\Scripts\activate
-```
+2. **Install the package in editable mode:**
+   ```bash
+   pip install -e .
+   ```
 
-2. **Install dependencies**:
+3. **Run the primer design CLI:**
+   Using Python directly:
+   ```bash
+   python -m primer_design.cli --fasta pET28a_Melittin.fasta --amplicon_length 500
+   ```
+   - Replace `pET28a_Melittin.fasta` with your own FASTA file if needed.
 
-```bash
-pip install -r requirements.txt
-```
+4. **Run all unit tests:**
+   ```bash
+   python -m unittest discover tests
+   ```
 
-3. **Run the primer design script** with your clean FASTA file:
+## License
 
-```bash
-python primer_design.py --fasta pET28a_Melittin.fasta --amplicon_length 500
-```
-
-- Replace `pET28a_Melittin.fasta` with your FASTA file if different.
-- The script will print the selected forward and reverse primers, their Tm, positions, and amplicon info.
-
-4. **Run unit tests** (optional, for developers):
-
-```bash
-python -m unittest test_primer_design.py
-```
+MIT
